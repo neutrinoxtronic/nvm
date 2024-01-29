@@ -1740,7 +1740,7 @@ nvm_print_versions() {
     -v old_lts_color="$DEFAULT_COLOR" -v has_colors="$NVM_HAS_COLORS" '
 function alen(arr, i, len) { len=0; for(i in arr) len++; return len; }
 function v2a(v, a, s) { s=v; sub(/^(iojs-)?v/, "", s); split(s, a, "."); }
-function comp(v1,v2,d,a1,a2,i) { v2a(v1,a1); v2a(v2,a2); for(i in a1) d[i] = a1[i] - a2[i]; for(i in d) { if(d[i] != 0) return d[i]}; return 0; }
+function vcmp(v1,v2,a1,a2,i,d) { v2a(v1,a1); v2a(v2,a2); for(i=1;i<4;i++) { d = a1[i] - a2[i]; if(d!=0) return d; } return 0; }
 BEGIN {
   fmt_installed = has_colors ? (installed_color ? "\033[" installed_color "%15s\033[0m" : "%15s") : "%15s *";
   fmt_system = has_colors ? (system_color ? "\033[" system_color "%15s\033[0m" : "%15s") : "%15s *";
@@ -1755,19 +1755,24 @@ BEGIN {
   split(remote_versions, lines, "|");
   split(installed_versions, installed, "|");
   rows = alen(lines);
-  filter = (min_ver != "v0");
+  filter_on = (vcmp("v0.0.0", min_ver) != 0);
   for (m = n = 1; n <= rows; n++) {
     split(lines[n], fields, "[[:blank:]]+");
     cols = alen(fields);
     version = fields[1];
-    if (filter && comp(version, min_ver) < 0) continue;
-
-    filter = 0;
     is_installed = 0;
     for (i in installed) {
       if (version == installed[i]) {
         is_installed = 1;
         break;
+      }
+    }
+
+    if (filter_on && !is_installed) {
+      if (vcmp(version, min_ver) >= 0) {
+        filter_on = 0;
+      } else {
+        continue;
       }
     }
 
@@ -1792,8 +1797,8 @@ BEGIN {
     output[m++] = formatted;
   }
 
-  for (m in output) {
-    print output[m]
+  for (n=1; n < m; n++) {
+    print output[n]
   }
 
   exit
