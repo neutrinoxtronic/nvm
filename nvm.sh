@@ -2807,6 +2807,23 @@ nvm_is_natural_num() {
   esac
 }
 
+nvm_write_nvmrc() {
+  local VERSION_STRING
+  VERSION_STRING=$(nvm_version "${1-$VERSION_STRING}")
+  if [ "$VERSION_STRING" = '∞' ] || [ "$VERSION_STRING" = 'N/A' ]; then
+    return 1
+  fi
+  echo "$VERSION_STRING" | tee "$PWD"/.nvmrc > /dev/null || {
+    if [ "${NVM_SILENT:-0}" -ne 1 ]; then
+      nvm_err "Warning: Unable to write version number ($VERSION_STRING) to .nvmrc"
+    fi
+    return 3
+  }
+  if [ "${NVM_SILENT:-0}" -ne 1 ]; then
+    nvm_echo "Wrote version number ($VERSION_STRING) to .nvmrc"
+  fi
+}
+
 # Check version dir permissions
 nvm_check_file_permissions() {
   nvm_is_zsh && setopt local_options nonomatch
@@ -2912,6 +2929,7 @@ nvm() {
         nvm_echo '    --no-progress                             Disable the progress bar on any downloads'
         nvm_echo '    --alias=<name>                            After installing, set the alias specified to the version specified. (same as: nvm alias <name> <version>)'
         nvm_echo '    --default                                 After installing, set default alias to the version specified. (same as: nvm alias default <version>)'
+        nvm_echo '    --save                                    After installing, write the specified version to .nvmrc'
         nvm_echo '  nvm uninstall <version>                     Uninstall a version'
         nvm_echo '  nvm uninstall --lts                         Uninstall using automatic LTS (long-term support) alias `lts/*`, if available.'
         nvm_echo '  nvm uninstall --lts=<LTS name>              Uninstall using automatic alias for provided LTS line, if available.'
@@ -2920,6 +2938,7 @@ nvm() {
         nvm_echo '    --silent                                  Silences stdout/stderr output'
         nvm_echo '    --lts                                     Uses automatic LTS (long-term support) alias `lts/*`, if available.'
         nvm_echo '    --lts=<LTS name>                          Uses automatic alias for provided LTS line, if available.'
+        nvm_echo '    --save                                    Writes the specified version to .nvmrc.'
         nvm_echo '  nvm exec [<version>] [<command>]            Run <command> on <version>. Uses .nvmrc if available and version is omitted.'
         nvm_echo '   The following optional arguments, if provided, must appear directly after `nvm exec`:'
         nvm_echo '    --silent                                  Silences stdout/stderr output'
@@ -3132,6 +3151,8 @@ nvm() {
       local ALIAS
       local NVM_UPGRADE_NPM
       NVM_UPGRADE_NPM=0
+      local NVM_WRITE_TO_NVMRC
+      NVM_WRITE_TO_NVMRC=0
 
       local PROVIDED_REINSTALL_PACKAGES_FROM
       local REINSTALL_PACKAGES_FROM
@@ -3228,6 +3249,10 @@ nvm() {
           ;;
           --skip-default-packages)
             SKIP_DEFAULT_PACKAGES=true
+            shift
+          ;;
+          --save | -w)
+            NVM_WRITE_TO_NVMRC=1
             shift
           ;;
           *)
@@ -3466,6 +3491,7 @@ nvm() {
       else
         EXIT_CODE=$?
       fi
+
       return $EXIT_CODE
     ;;
     "uninstall")
@@ -3617,6 +3643,7 @@ nvm() {
           --) ;;
           --lts) NVM_LTS='*' ;;
           --lts=*) NVM_LTS="${1##--lts=}" ;;
+          --save | -w) NVM_WRITE_TO_NVMRC=1 ;;
           --*) ;;
           *)
             if [ -n "${1-}" ]; then
@@ -3648,6 +3675,10 @@ nvm() {
       if [ -z "${VERSION}" ]; then
         >&2 nvm --help
         return 127
+      fi
+
+      if [ "${NVM_WRITE_TO_NVMRC:-0}" -eq 1 ]; then
+        nvm_write_nvmrc "$VERSION"
       fi
 
       if [ "_${VERSION}" = '_system' ]; then
@@ -4271,6 +4302,7 @@ nvm() {
         nvm_get_colors nvm_set_colors nvm_print_color_code nvm_wrap_with_color_code nvm_format_help_message_colors \
         nvm_echo_with_colors nvm_err_with_colors \
         nvm_get_artifact_compression nvm_install_binary_extract nvm_extract_tarball \
+        nvm_write_nvmrc \
         >/dev/null 2>&1
       unset NVM_RC_VERSION NVM_NODEJS_ORG_MIRROR NVM_IOJS_ORG_MIRROR NVM_DIR \
         NVM_CD_FLAGS NVM_BIN NVM_INC NVM_MAKE_JOBS \
@@ -4407,7 +4439,7 @@ nvm_auto() {
   local NVM_CURRENT
   if [ "_${NVM_MODE}" = '_install' ]; then
     VERSION="$(nvm_alias default 2>/dev/null || nvm_echo)"
-    if [ -n "${VERSION}" ]; then
+    if [ -n "${VERSION}" ] && ! [ "_${VERSION}" = '_N/A' ] && nvm_is_valid_version "${VERSION}"; then
       nvm install "${VERSION}" >/dev/null
     elif nvm_rc_version >/dev/null 2>&1; then
       nvm install >/dev/null
@@ -4416,7 +4448,7 @@ nvm_auto() {
     NVM_CURRENT="$(nvm_ls_current)"
     if [ "_${NVM_CURRENT}" = '_none' ] || [ "_${NVM_CURRENT}" = '_system' ]; then
       VERSION="$(nvm_resolve_local_alias default 2>/dev/null || nvm_echo)"
-      if [ -n "${VERSION}" ]; then
+      if [ -n "${VERSION}" ] && ! [ "_${VERSION}" = '_N/A' ] && nvm_is_valid_version "${VERSION}"; then
         nvm use --silent "${VERSION}" >/dev/null
       elif nvm_rc_version >/dev/null 2>&1; then
         nvm use --silent >/dev/null
